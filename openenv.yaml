@@ -1,0 +1,94 @@
+name: WarehouseFulfillmentEnv
+version: "1.0.0"
+description: >
+  A real-world supply-chain simulation where an AI agent manages a warehouse:
+  picking items from inventory, fulfilling customer orders, and shipping them
+  before deadlines. Supports partial-progress rewards and three difficulty tiers.
+
+domain: supply_chain_logistics
+language: python
+entry_point: env.WarehouseFulfillmentEnv
+
+observation_space:
+  type: dict
+  fields:
+    step:        { type: int,  description: "Current episode step" }
+    max_steps:   { type: int,  description: "Episode horizon" }
+    inventory:   { type: dict, description: "SKU → quantity on hand" }
+    orders:
+      type: list
+      item_fields:
+        order_id:      { type: str }
+        deadline_step: { type: int }
+        shipped:       { type: bool }
+        late:          { type: bool }
+        fill_rate:     { type: float, range: [0.0, 1.0] }
+        lines:
+          type: list
+          item_fields:
+            sku:           { type: str }
+            qty_ordered:   { type: int }
+            qty_fulfilled: { type: int }
+
+action_space:
+  type: union
+  variants:
+    - action_type: pick
+      fields:
+        order_id: { type: str }
+        sku:      { type: str }
+        qty:      { type: int, min: 1 }
+    - action_type: ship
+      fields:
+        order_id: { type: str }
+    - action_type: restock
+      fields:
+        sku: { type: str }
+        qty: { type: int, min: 1 }
+    - action_type: wait
+
+reward:
+  range: [-inf, +inf]
+  signals:
+    pick_progress:    "+0.05 × qty × (1 + fill_rate)"
+    ship_full_ontime: "+1.00"
+    ship_partial:     "+0.40"
+    late_penalty:     "-0.50 per missed deadline"
+    overstock_waste:  "-0.02 per excess unit restocked"
+    idle_penalty:     "-0.01 when work is available"
+
+tasks:
+  - id: easy_ship_2_orders
+    description: "Ship ≥2 fully-fulfilled orders on time (3 orders, 50 steps)"
+    difficulty: easy
+    score_range: [0.0, 1.0]
+    grader: tasks.run_task_easy
+
+  - id: medium_fill_and_ontime
+    description: "Achieve ≥80% fill-rate AND ≥50% on-time rate (5 orders, 60 steps)"
+    difficulty: medium
+    score_range: [0.0, 1.0]
+    grader: tasks.run_task_medium
+
+  - id: hard_throughput_scarcity
+    description: "Ship ≥7/10 orders fully on time under tight inventory (80 steps)"
+    difficulty: hard
+    score_range: [0.0, 1.0]
+    grader: tasks.run_task_hard
+
+baselines:
+  - name: RandomAgent
+    script: baseline.py
+  - name: GreedyAgent
+    script: baseline.py
+
+repository:  repository: https://github.com/Meghana_dharmakari/warehouse-fulfillment-env
+api:
+  reset: /reset
+  step: /step
+  state: /state
+constraints:
+  max_inventory_capacity: "finite"
+  deadlines_enforced: true
+determinism: stochastic
+
