@@ -3,3 +3,6 @@ gradio>=4.0
 huggingface_hub
 python-dotenv
 pyyaml
+fastapi
+uvicorn
+gradio
